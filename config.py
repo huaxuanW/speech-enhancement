@@ -12,7 +12,7 @@ EPOCH = 40
 BATCH_SIZE = 1
 lr = 1e-4
 
-transform_type = 'logmag' # option: transform_type = 'logmag', transform_type = 'lps', transform_type = 'normal'
+transform_type = 'normal' # option: transform_type = 'logmag', transform_type = 'lps', transform_type = 'normal'
 action = 'train' # option: action = 'retrain', action = 'train'
 pretrain_model_name = '7_epoch.pth.tar'
 stft_type = 'torch' #option: stft_type = 'torch', stft_type = 'librosa'
