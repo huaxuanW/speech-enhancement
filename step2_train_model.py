@@ -21,7 +21,7 @@ from trainer import Trainer
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 ##########  define targets, checkpoint , and data path  ##############
-recovered_path = os.path.join(DATADIR, 'recovered')
+recovered_path = os.path.join(DATADIR, 'recovered_mask')
 model_path = os.path.join(DATADIR, 'models_mask')
 
 if not os.path.exists(model_path):

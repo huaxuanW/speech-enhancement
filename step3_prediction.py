@@ -19,8 +19,8 @@ import os
 
 import random
   
-model_path = os.path.join(DATADIR, 'models_3')
-pretrain_model_name = '15_epoch.pth.tar'
+model_path = os.path.join(DATADIR, 'models_mask')
+pretrain_model_name = '12_epoch.pth.tar'
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
@@ -31,7 +31,8 @@ SE = SePipline(
     window='hanning',
     device=DEVICE,
     chunk_size=CHUNK_SIZE,
-    transform_type = transform_type)
+    transform_type = transform_type,
+    target = target)
 
 optimizer = torch.optim.Adam(SE.parameters(), lr=lr)
 criterion = nn.MSELoss()
@@ -46,13 +47,13 @@ test_list = get_audio_path_list(os.path.join(DATADIR, 'valid'), 'flac')
 raw_noise_path = os.path.join(DATADIR, 'raw_noise')
 noise_path = []
 # noise_path.extend(get_audio_path_list(raw_noise_path, 'pt')
-noise_path.append(os.path.join(raw_noise_path, 'white_noise.pt'))
-noise_path.append(os.path.join(raw_noise_path, 'siren_noise.pt'))
-noise_path.append(os.path.join(raw_noise_path, 'baby.pt'))
-noise_path.append(os.path.join(raw_noise_path, 'engine_sound.pt'))
-noise_path.append(os.path.join(raw_noise_path, 'dog_barking.pt'))
-noise_path.append(os.path.join(raw_noise_path, 'traffic_sounds.pt'))
-# noise_path.append(os.path.join('testnoise', 'helicopter.pt'))
+# noise_path.append(os.path.join(raw_noise_path, 'white_noise.pt'))
+# noise_path.append(os.path.join(raw_noise_path, 'siren_noise.pt'))
+# noise_path.append(os.path.join(raw_noise_path, 'baby.pt'))
+# noise_path.append(os.path.join(raw_noise_path, 'engine_sound.pt'))
+# noise_path.append(os.path.join(raw_noise_path, 'dog_barking.pt'))
+# noise_path.append(os.path.join(raw_noise_path, 'traffic_sounds.pt'))
+noise_path.append(os.path.join('testnoise', 'helicopter.pt'))
 ########### 
 
 noise_path = np.random.choice(noise_path)
@@ -75,7 +76,8 @@ iStft = torch_istft(n_fft =K,
                   device=DEVICE,
                   chunk_size= CHUNK_SIZE,
                   transform_type =transform_type,
-                  cnn=cnn)
+                  cnn=cnn,
+                  target= target)
 
 dt = iStft(dt)
 
