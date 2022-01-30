@@ -2,6 +2,8 @@ import torch
 
 import torch.nn as nn
 
+import torch.nn.functional as F
+
 import librosa
 
 from utils import quantize_spectrum, normalize_quantized_spectrum
@@ -250,6 +252,12 @@ class torch_istft(nn.Module):
         
         batch, time, freq = dt['pred_y'].shape
         
+        if freq == 256:
+            
+            dt['pred_y'] = F.pad(dt['pred_y'], (0, 1, 0, 0))
+            
+            freq += 1
+        
         dt['pred_y'] = torch.reshape(dt['pred_y'], (-1, freq))
         
         lens = dt['pred_y'].shape[0]
@@ -292,14 +300,21 @@ class torch_istft(nn.Module):
         
         if self.transform_type == 'logmag':
             
-            dt['pred_y'] = logmag_transform(dt['pred_y'], recover=True)
+            for key in ['mixed_mag', 'clean_mag', 'pred_y']:
+            
+                dt[key] = logmag_transform(dt[key], recover=True)
 
         elif self.transform_type == 'lps':
             
-            dt['pred_y'] = lps_transform(dt['pred_y'], recover=True)
+            for key in ['mixed_mag', 'clean_mag', 'pred_y']:
+            
+                dt[key] = lps_transform(dt[key], recover=True)
             
         else:
-            dt['pred_y'] = quantize_transform(dt['pred_y'], recover=True)
+            
+            for key in ['mixed_mag', 'clean_mag', 'pred_y']:
+                
+                dt[key] = quantize_transform(dt[key], recover=True)
 
         if self.cnn == '1d':
 
