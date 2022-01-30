@@ -1,3 +1,3 @@
 # speech-enhancement for MAX78000
 
-More infor: https://github.com/MaximIntegratedAI 
+More info: https://github.com/MaximIntegratedAI 
