@@ -6,7 +6,7 @@ import os
 
 from stft import ISTFT, torch_istft
 
-from utils import save_wav
+from utils import save_wav, evaluation
 
 class Trainer():
 
@@ -29,45 +29,38 @@ class Trainer():
         - epochs: int 玄学
         - save_model: boolean, 保存模型吗？ 保存到models文件夹下
         """
-        best_loss = 1_000_000_000
+        best_pesq = 0
 
         for epoch in range(epoch, epoch + epochs + 1):
 
             train_loss = self._train(epoch)
 
-#             loss = self._valid(epoch)
+            loss, pesq, stoi, segsnr = self._valid(epoch)
 
-#             if loss < best_loss:
-
-#                 if save_model:
-
-#                     if not os.path.exists(kwargs['model_path']):
-
-#                         os.mkdir(kwargs['model_path'])
-            if train_loss < best_loss:
-                
-                best_loss = train_loss
             
             if save_model:
                 if not os.path.exists(kwargs['model_path']):
                     os.mkdir(kwargs['model_path'])
-
-                state_dict = {
-                    'epoch': epoch,
-                    'model': self.model.state_dict(),
-                    'optimizer': self.optimizer.state_dict(),
-                    'best_loss': best_loss
-                }
-            
-                torch.save(state_dict, os.path.join(kwargs['model_path'], f'{epoch}_epoch.pth.tar'))
                 
-            self._test(self.test_loader, epoch, *args, **kwargs)
+                if best_pesq < pesq:
+                    best_pesq = pesq
+                    state_dict = {
+                        'epoch': epoch,
+                        'model': self.model.state_dict(),
+                        'optimizer': self.optimizer.state_dict()
+                    }
+
+                    torch.save(state_dict, os.path.join(kwargs['model_path'], f'{pesq}_{epoch}_epoch.pth.tar'))
+                
+                    self._test(self.test_loader, epoch, *args, **kwargs)
 
 
     
     def _train(self, epoch):
 
         total_loss = 0
+        
+        total_pesq, total_stoi, total_segsnr = 0, 0, 0
 
         train_bar = tqdm(self.train_set)     
 
@@ -83,19 +76,36 @@ class Trainer():
 
             batch = self.model(batch)
 
-            loss = self.criterion(batch['pred_y'], batch['y'])
+            loss = self.criterion(batch['pred_mag'], batch['y'])
 
             total_loss += loss.item()
             
             loss.backward()
             
             self.optimizer.step()
+            
+            pesq, stoi, segsnr = evaluation(batch['true_y'].numpy(), batch['pred_y'].numpy())
+            
+            total_pesq += pesq
+            
+            total_stoi += stoi
+            
+            total_segsnr += segsnr
 
-            train_bar.set_postfix(loss=loss.item())
+            train_bar.set_postfix(loss=round(loss.item(),2), pesq=pesq, stoi=stoi, segSNR=segsnr)
         
-        average_loss = round(total_loss / len(self.train_set), 4)
+        lens = len(self.train_set)
+        
+        average_loss = round(total_loss / lens, 4)
+        
+        average_pesq = round(total_pesq / lens, 2)
+        
+        average_stoi = round(total_stoi / lens, 2)
+        
+        average_segsnr = round(total_segsnr / lens, 2)
+               
 
-        print('\tLoss:', average_loss)
+        print('\tLoss: ', average_loss, 'pesq: ', average_pesq, 'stoi: ', average_stoi, 'sngSNR: ', average_segsnr)
         
         return average_loss
 
@@ -103,6 +113,8 @@ class Trainer():
     def _valid(self, epoch):
 
         total_loss = 0
+        
+        total_pesq, total_stoi, total_segsnr = 0, 0, 0
 
         valid_bar = tqdm(self.valid_set)
 
@@ -120,17 +132,35 @@ class Trainer():
 
                 batch = self.model(batch)
 
-                loss = self.criterion(batch['pred_y'], batch['y'])
+                loss = self.criterion(batch['pred_mag'], batch['y'])
 
                 total_loss += loss.item()
+                
+                pesq, stoi, segsnr = evaluation(batch['true_y'].numpy(), batch['pred_y'].numpy())
+            
+                total_pesq += pesq
 
-                valid_bar.set_postfix(loss=loss.item())
+                total_stoi += stoi
+
+                total_segsnr += segsnr
+
+                valid_bar.set_postfix(loss=round(loss.item(),2), pesq=pesq, stoi=stoi, segSNR=segsnr)
+        lens = len(self.valid_set)
         
-        average_loss = round(total_loss / len(self.valid_set), 4)
+        average_loss = round(total_loss / lens, 4)
 
-        print('\tLoss:', average_loss)
+        average_loss = round(total_loss / lens, 4)
+        
+        average_pesq = round(total_pesq / lens, 2)
+        
+        average_stoi = round(total_stoi / lens, 2)
+        
+        average_segsnr = round(total_segsnr / lens, 2)
+               
 
-        return average_loss
+        print('\tLoss: ', average_loss, 'pesq: ', average_pesq, 'stoi: ', average_stoi, 'sngSNR: ', average_segsnr)
+
+        return average_loss, average_pesq, average_stoi, average_segsnr
 
     
 

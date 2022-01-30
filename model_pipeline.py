@@ -4,20 +4,34 @@ import torch
 
 from stft import *
 
-from sliding_window import ChunkDatav3
+from sliding_window import *
 
-from senet import SENetv4
+from senet import *
 
 
 
 class SePipline(nn.Module):
-    def __init__(self, n_fft, hop_len, win_len, window, device, chunk_size, transform_type='logmag', stft_type='torch', **kwargs):
+    def __init__(self, version, n_fft, hop_len, win_len, window, device, chunk_size, transform_type='logmag', stft_type='torch', **kwargs):
 
         super(SePipline, self).__init__()
+
+        if version == 'v1':
+            chunk = ChunkData(chunk_size= 128, target= 'clean_mag')
+            model = SENetv1()
+        elif version == 'v2':
+            chunk = ChunkDatav2(chunk_size= 16, target= 'clean_mag')
+            model = SENetv3()
+        elif version == 'v3':
+            chunk = ChunkDatav2(chunk_size= 16, target= 'mask')
+            model = SENetv3()
+        elif version == 'v4':
+            chunk = ChunkDatav3(chunk_size= chunk_size, target= kwargs['target'])
+            model = SENetv4()
+
         
         if stft_type == 'torch':
             _stft = torch_stft(n_fft=n_fft, hop_length=hop_len, win_length= win_len, device = device, transform_type= transform_type)
-            _istft = torch_istft(n_fft =n_fft, hop_length=hop_len, win_length= win_len, device=device, chunk_size= chunk_size, transform_type =transform_type, target= kwargs['target'])
+            _istft = torch_istft(n_fft =n_fft, hop_length=hop_len, win_length= win_len, device=device, chunk_size= chunk_size, transform_type =transform_type, target= kwargs['target'], cnn = kwargs['cnn'])
             
         elif stft_type == 'librosa':
             _stft = STFT(n_fft=n_fft, hop_len=hop_len, win_len= win_len, window=window, transform_type= transform_type)
@@ -25,8 +39,9 @@ class SePipline(nn.Module):
             
         self.model = nn.Sequential(
             _stft,
-            ChunkDatav3(chunk_size= chunk_size, target= kwargs['target']),
-            SENetv4()
+            chunk,
+            model,
+            _istft
         ).to(device)
 
     def forward(self, dt):

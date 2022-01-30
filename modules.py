@@ -74,6 +74,25 @@ class MaxPoolConv2dBNReLU(nn.Module):
     def forward(self, x):
         return self.f(x)
 
+class AvgPoolConv2dBNReLU(nn.Module):
+    def __init__(self, in_channels=1, out_channels= 64, kernel_size=3, stride=1, padding=1, bias=True, batchnorm='Affine'):
+        super(AvgPoolConv2dBNReLU, self).__init__()
+
+        self.f = nn.Sequential(
+            nn.Conv2d(
+                in_channels, 
+                out_channels, 
+                kernel_size=kernel_size, 
+                stride=stride, 
+                padding=padding),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(True),
+            nn.AvgPool2d(kernel_size=2, stride=2)
+        )
+    
+    def forward(self, x):
+        return self.f(x)
+
 class Conv2dBNReLU(nn.Module):
     def __init__(self, in_channels=1, out_channels= 64, kernel_size=3, stride=1, padding=1, bias=True, batchnorm='Affine'):
         super(Conv2dBNReLU, self).__init__()

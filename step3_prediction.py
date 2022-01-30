@@ -25,6 +25,7 @@ DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
 SE = SePipline(
+    version='v3',
     n_fft=K, 
     hop_len=N_s, 
     win_len= N_d, 

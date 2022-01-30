@@ -104,7 +104,7 @@ class SENetv1(nn.Module):
         x = dt['x']
         for layer in self.encoder:
             x = layer(x)
-        dt['pred_y'] = torch.squeeze(x)
+        dt['pred_mag'] = torch.squeeze(x)
         return dt
 
 
@@ -152,7 +152,7 @@ class SENetv2(nn.Module):
         x = dt['x']
         for layer in self.encoder:
             x = layer(x)
-        dt['pred_y'] = torch.squeeze(x)
+        dt['pred_mag'] = torch.squeeze(x)
         return dt
 
     
@@ -201,7 +201,7 @@ class SENetv3(nn.Module):
                 skip_output = skip_outputs.pop()
                 x = torch.cat([x, skip_output], dim = 1)
             x = layer(x)
-        dt['pred_y'] = torch.squeeze(x).permute(0, 2, 1)
+        dt['pred_mag'] = torch.squeeze(x).permute(0, 2, 1)
         return dt
 
 
@@ -209,13 +209,25 @@ class SENetv4(nn.Module):
     def __init__(self):
         super(SENetv4, self).__init__()
         # set_device(device=85, simulate=True, round_avg=True)
-        e1 = MaxPoolConv2dBNReLU(in_channels=1, out_channels= 64, kernel_size=3, stride=1, padding=1, bias=True, batchnorm='Affine')
+        e1 = nn.Sequential(
+            Conv2dBNReLU(in_channels=1, out_channels= 64, kernel_size=3, stride=1, padding=1, bias=True, batchnorm='Affine'),
+            AvgPoolConv2dBNReLU(in_channels=64, out_channels= 64, kernel_size=3, stride=1, padding=1, bias=True, batchnorm='Affine')            
+        )
 
-        e2 = MaxPoolConv2dBNReLU(in_channels=64, out_channels= 128, kernel_size=3, stride=1, padding=1, bias=True, batchnorm='Affine')
+        e2 = nn.Sequential(
+            Conv2dBNReLU(in_channels=64, out_channels= 128, kernel_size=3, stride=1, padding=1, bias=True, batchnorm='Affine'),
+            AvgPoolConv2dBNReLU(in_channels=128, out_channels= 128, kernel_size=3, stride=1, padding=1, bias=True, batchnorm='Affine')            
+        )
 
-        e3 = MaxPoolConv2dBNReLU(in_channels=128, out_channels= 256, kernel_size=3, stride=1, padding=1, bias=True, batchnorm='Affine')
+        e3 = nn.Sequential(
+            Conv2dBNReLU(in_channels=128, out_channels= 256, kernel_size=3, stride=1, padding=1, bias=True, batchnorm='Affine'),
+            AvgPoolConv2dBNReLU(in_channels=256, out_channels= 256, kernel_size=3, stride=1, padding=1, bias=True, batchnorm='Affine')
+        )
 
-        e4 = MaxPoolConv2dBNReLU(in_channels=256, out_channels= 256, kernel_size=3, stride=1, padding=1, bias=True, batchnorm='Affine')
+        e4 = nn.Sequential(
+            Conv2dBNReLU(in_channels=256, out_channels= 256, kernel_size=3, stride=1, padding=1, bias=True, batchnorm='Affine'),
+            AvgPoolConv2dBNReLU(in_channels=256, out_channels= 256, kernel_size=3, stride=1, padding=1, bias=True, batchnorm='Affine'),
+        )
 
 
         d4 = nn.Sequential(
@@ -252,5 +264,5 @@ class SENetv4(nn.Module):
             x = torch.cat([x, skip_output], dim = 1)
             x = layer(x)
         
-        dt['pred_y'] = torch.squeeze(x).permute(0, 2, 1)
+        dt['pred_mag'] = torch.squeeze(x).permute(0, 2, 1)
         return dt

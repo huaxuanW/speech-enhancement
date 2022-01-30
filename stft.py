@@ -58,7 +58,7 @@ def quantize_transform(magnitude, recover = False):
     
     if recover:
         
-        magnitude = torch.clamp(magnitude, min= 0, max= torch.amax(magnitude))
+        magnitude = torch.clamp(magnitude, min= 0, max= torch.amax(magnitude).item())
         
         magnitude = normalize_quantized_spectrum(magnitude)
         
@@ -250,19 +250,23 @@ class torch_istft(nn.Module):
     
     def mask_recover(self, dt):
         
-        batch, time, freq = dt['pred_y'].shape
+        batch, time, freq = dt['pred_mag'].shape
         
         if freq == 256:
             
-            dt['pred_y'] = F.pad(dt['pred_y'], (0, 1, 0, 0))
+            pred_y = F.pad(dt['pred_mag'], (0, 1, 0, 0))
             
             freq += 1
         
-        dt['pred_y'] = torch.reshape(dt['pred_y'], (-1, freq))
+            pred_y = torch.reshape(pred_y, (-1, freq))
         
-        lens = dt['pred_y'].shape[0]
+        else:
+            
+            pred_y = torch.reshape(dt['pred_mag'], (-1, freq))
         
-        dt['pred_y'] = dt['pred_y'] * dt['mixed_mag'][:lens]
+        lens = pred_y.shape[0]
+        
+        dt['pred_y'] = pred_y * dt['mixed_mag'][:lens]
         
         dt['pred_y'] = torch.reshape(dt['pred_y'], (batch, time, freq))
         
@@ -297,7 +301,7 @@ class torch_istft(nn.Module):
         if self.target == 'mask':  
             
             dt = self.mask_recover(dt)
-        
+
         if self.transform_type == 'logmag':
             
             for key in ['mixed_mag', 'clean_mag', 'pred_y']:
