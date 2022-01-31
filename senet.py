@@ -247,16 +247,3 @@ class SENetv4(nn.Module):
         dt['pred_mag'] = torch.squeeze(x).permute(0, 2, 1)
         return dt
     
-    def forward(self, dt):
-        x = dt['x'].reshape(-1, 1, dt['x'].shape[1], dt['x'].shape[2])
-        skip_outputs = []
-        for layer in self.encoder:
-            x = layer(x)
-            skip_outputs.append(x)
-        for layer in self.decoder:
-            skip_output = skip_outputs.pop()
-            x = torch.cat([x, skip_output], dim = 1)
-            x = layer(x)
-        
-        dt['pred_mag'] = torch.squeeze(x).permute(0, 2, 1)
-        return dt
