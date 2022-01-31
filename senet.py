@@ -206,52 +206,46 @@ class SENetv3(nn.Module):
 
 
 class SENetv4(nn.Module):
-    def __init__(self):
+    def __init__(self, channel):
         super(SENetv4, self).__init__()
-        # set_device(device=85, simulate=True, round_avg=True)
-        e1 = nn.Sequential(
-            Conv2dBNReLU(in_channels=1, out_channels= 64, kernel_size=3, stride=1, padding=1, bias=True, batchnorm='Affine'),
-            AvgPoolConv2dBNReLU(in_channels=64, out_channels= 64, kernel_size=3, stride=1, padding=1, bias=True, batchnorm='Affine')            
+
+        self.encoder = nn.Sequential(
+            nn.Conv2d(in_channels=1, out_channels=channel, kernel_size=3, stride=1,
+            padding=1, dilation=1),
+
+            nn.ReLU(True),
+
+            nn.MaxPool2d(kernel_size=2, stride=2),
+
+            CNNBlockv2(channel, channel * 2),
+
+            nn.MaxPool2d(kernel_size=2, stride=2),
+
+            CNNBlockv2(channel * 2, channel * 4)
+        )
+        
+        self.decoder = nn.Sequential(
+            TCNNBlockv2(channel * 4, channel * 2),
+
+            nn.Dropout2d(p=0.5, inplace=True),
+
+            TCNNBlockv2(channel * 2, channel),
+
+            nn.Dropout2d(p=0.5, inplace=True),
+
+            CNNBlockv2(channel, 1)
         )
 
-        e2 = nn.Sequential(
-            Conv2dBNReLU(in_channels=64, out_channels= 128, kernel_size=3, stride=1, padding=1, bias=True, batchnorm='Affine'),
-            AvgPoolConv2dBNReLU(in_channels=128, out_channels= 128, kernel_size=3, stride=1, padding=1, bias=True, batchnorm='Affine')            
-        )
+    def forward(self, dt):
 
-        e3 = nn.Sequential(
-            Conv2dBNReLU(in_channels=128, out_channels= 256, kernel_size=3, stride=1, padding=1, bias=True, batchnorm='Affine'),
-            AvgPoolConv2dBNReLU(in_channels=256, out_channels= 256, kernel_size=3, stride=1, padding=1, bias=True, batchnorm='Affine')
-        )
+        x = dt['x'].reshape(-1, 1, dt['x'].shape[1], dt['x'].shape[2])
 
-        e4 = nn.Sequential(
-            Conv2dBNReLU(in_channels=256, out_channels= 256, kernel_size=3, stride=1, padding=1, bias=True, batchnorm='Affine'),
-            AvgPoolConv2dBNReLU(in_channels=256, out_channels= 256, kernel_size=3, stride=1, padding=1, bias=True, batchnorm='Affine'),
-        )
+        x = self.encoder(x)
 
+        x = self.decoder(x)
 
-        d4 = nn.Sequential(
-            ConvTranspose2d(in_channels=512, out_channels= 256, kernel_size=3, stride=2, padding=1, bias=True, batchnorm='Affine'),
-            Conv2dBNReLU(in_channels=256, out_channels= 256, kernel_size=3, stride=1, padding=1, bias=True, batchnorm='Affine')
-        )
-
-        d3 = nn.Sequential(
-            ConvTranspose2d(in_channels=512, out_channels= 256, kernel_size=3, stride=2, padding=1, bias=True, batchnorm='Affine'),
-            Conv2dBNReLU(in_channels=256, out_channels= 128, kernel_size=3, stride=1, padding=1, bias=True, batchnorm='Affine')
-        )
-
-        d2 = nn.Sequential(
-            ConvTranspose2d(in_channels=256, out_channels= 128, kernel_size=3, stride=2, padding=1, bias=True, batchnorm='Affine'),
-            Conv2dBNReLU(in_channels=128, out_channels= 64, kernel_size=3, stride=1, padding=1, bias=True, batchnorm='Affine')
-        )
-
-        d1 = nn.Sequential(
-            ConvTranspose2d(in_channels=128, out_channels= 64, kernel_size=3, stride=2, padding=1, bias=True, batchnorm='Affine'),
-            Conv2dBNReLU(in_channels=64, out_channels= 1, kernel_size=3, stride=1, padding=1, bias=True, batchnorm='Affine')
-        )
-        self.encoder = nn.ModuleList([e1, e2, e3, e4])
-
-        self.decoder = nn.ModuleList([d4, d3, d2, d1])
+        dt['pred_mag'] = torch.squeeze(x).permute(0, 2, 1)
+        return dt
     
     def forward(self, dt):
         x = dt['x'].reshape(-1, 1, dt['x'].shape[1], dt['x'].shape[2])
