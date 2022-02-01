@@ -1,6 +1,57 @@
 import torch
 import torch.nn as nn
-from modules import *
+
+class CNN2DBlock(nn.Module):
+    def __init__(self, channel_in, channel_out, kernel_size=(5, 7), dilation=1, stride=(1, 2), padding=0):
+
+        super(CNN2DBlock, self).__init__()
+
+        self.f = nn.Sequential(
+            nn.Conv2d(
+                channel_in, 
+                channel_out, 
+                kernel_size=kernel_size,
+                stride=stride, 
+                padding=padding, 
+                dilation=dilation),
+
+            nn.BatchNorm2d(channel_out),
+
+            nn.LeakyReLU(negative_slope=0.1)
+        )
+
+    def forward(self, x):
+
+        return self.f(x)
+
+class TCNN2DBlock(nn.Module):
+    def __init__(self, channel_in, channel_out, kernel_size=(5, 7), dilation=1, stride=(1, 2), padding=0, dropout=False, output_padding=1):
+
+        super(TCNN2DBlock, self).__init__()
+
+        self.f = nn.Sequential(
+            nn.ConvTranspose2d(
+                channel_in, 
+                channel_out, 
+                kernel_size=kernel_size,
+                stride=stride, 
+                padding=padding, 
+                dilation=dilation,
+                output_padding=output_padding),
+
+            nn.BatchNorm2d(channel_out),
+
+            nn.LeakyReLU(negative_slope=0.1)
+        )
+
+        self.d = dropout
+        self.dropout = nn.Dropout(0.5)
+    def forward(self, x):
+        x = self.f(x)
+        if self.d:
+            x = self.dropout(x)
+        return x
+
 
 
 class SENetv0(nn.Module):
@@ -104,7 +155,7 @@ class SENetv1(nn.Module):
         x = dt['x']
         for layer in self.encoder:
             x = layer(x)
-        dt['pred_mag'] = torch.squeeze(x)
+        dt['pred_y'] = torch.squeeze(x)
         return dt
 
 
@@ -152,15 +203,12 @@ class SENetv2(nn.Module):
         x = dt['x']
         for layer in self.encoder:
             x = layer(x)
-        dt['pred_mag'] = torch.squeeze(x)
+        dt['pred_y'] = torch.squeeze(x)
         return dt
 
     
 
 class SENetv3(nn.Module):
-    """
-    chunk_size=16
-    """
     def __init__(self, freq_bin = 257, hidden_dim = 768, num_layer = 7, kernel_size = 3):
         super(SENetv3, self).__init__()
 
@@ -201,49 +249,6 @@ class SENetv3(nn.Module):
                 skip_output = skip_outputs.pop()
                 x = torch.cat([x, skip_output], dim = 1)
             x = layer(x)
-        dt['pred_mag'] = torch.squeeze(x).permute(0, 2, 1)
+        dt['pred_y'] = torch.squeeze(x).permute(0, 2, 1)
         return dt
 
-
-class SENetv4(nn.Module):
-    def __init__(self, channel):
-        super(SENetv4, self).__init__()
-
-        self.encoder = nn.Sequential(
-            nn.Conv2d(in_channels=1, out_channels=channel, kernel_size=3, stride=1,
-            padding=1, dilation=1),
-
-            nn.ReLU(True),
-
-            nn.MaxPool2d(kernel_size=2, stride=2),
-
-            CNNBlockv2(channel, channel * 2),
-
-            nn.MaxPool2d(kernel_size=2, stride=2),
-
-            CNNBlockv2(channel * 2, channel * 4)
-        )
-        
-        self.decoder = nn.Sequential(
-            TCNNBlockv2(channel * 4, channel * 2),
-
-            nn.Dropout2d(p=0.5, inplace=True),
-
-            TCNNBlockv2(channel * 2, channel),
-
-            nn.Dropout2d(p=0.5, inplace=True),
-
-            CNNBlockv2(channel, 1)
-        )
-
-    def forward(self, dt):
-
-        x = dt['x'].reshape(-1, 1, dt['x'].shape[1], dt['x'].shape[2])
-
-        x = self.encoder(x)
-
-        x = self.decoder(x)
-
-        dt['pred_mag'] = torch.squeeze(x).permute(0, 2, 1)
-        return dt
-    

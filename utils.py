@@ -1,339 +1,129 @@
-import torch
-
-import torch.nn as nn
-
-import torch.nn.functional as F
+import os, glob
 
 import librosa
 
-from utils import quantize_spectrum, normalize_quantized_spectrum
+import numpy as np
 
+import soundfile as sf
 
-def irm(clean_mag, noise_mag):
+import torch
+
+from tqdm import tqdm
+
+def load_noise(noise_paths):
+    print('loading noise')
+    return {i : torch.load(path) for i, path in tqdm(enumerate(noise_paths))}
+
+def save_wav(path, wav, fs):
     """
-    ideal ratio mask
-
-    to recover: predicted mask * noisy mag = clean mag
+    Save .wav file.
+    Argument/s:
+        path - absolute path to save .wav file.
+        wav - waveform to be saved.
+        fs - sampling frequency.
     """
-    eps= 1e-8
-    return (clean_mag ** 2 / (clean_mag ** 2 + noise_mag ** 2 + eps)) ** 0.5
+    wav = np.squeeze(wav)
+    sf.write(path, wav, fs)
 
-
-def psm(clean_fft, mixed_fft):
+def get_audio_path_list(dir, ext):
     """
-    phase sensitive mask
+    >>> train_path = os.path.join(root, 'train')
+    >>> train_list = get_audio_path_list(train_path, 'flac')
+    return全部结尾是ext的文件地址list
     """
-    return torch.abs(clean_fft) / torch.abs(mixed_fft) * torch.cos(torch.angle(mixed_fft) + torch.angle(clean_fft))
+    wav_path_list = []
+    wav_path_list.extend(glob.glob(os.path.join(dir, f"**/*.{ext}"), recursive=True))
+    return wav_path_list
 
 
-def logmag_transform(magnitude, recover = False):
-    
-    if recover:
-        
-        magnitude = torch.expm1(magnitude)
-            
-        magnitude = torch.clamp(magnitude, min= 0, max= torch.amax(magnitude))
-        
-        return magnitude
-    
-    return torch.log1p(magnitude)
-
-
-def lps_transform(magnitude, recover = False):
+def load_audio(path, sr= 16000):
     """
-    log power spectrum
+    读取audio
+    return numpy array
     """
+
+    waveform, sr = librosa.load(path, sr=sr)
+
+    return waveform
+
+
+def truncate_pad(sequence, max_len):
+    """
+    根据max_len填充或截取序列
+    """
+    length = len(sequence)
     
-    if recover:
-        
-        magnitude = torch.sqrt(10 ** magnitude)
-        
-        return magnitude
+    if length < max_len:
+
+        pad = (0, max_len - length) #pad 0 个在array前面， pad max_len - length个到array后面
+
+        sequence = np.pad(sequence, pad)
     
-    return torch.log10(magnitude ** 2)
+    else:
+
+        sequence = sequence[:max_len]
+
+    return sequence
 
 
+def snr_mixer(clean, noise, snr):
+    """
+    mix and scale clean speech and noise
+    """
+    # Normalizing to rms equal to 1
+    rmsclean = np.mean(clean[:] ** 2) ** 0.5
+    rmsnoise = np.mean(noise[:] ** 2) ** 0.5
 
-def quantize_transform(magnitude, recover = False):
+    cleanfactor = 10 ** (snr / 20)
     
-    if recover:
-        
-        magnitude = torch.clamp(magnitude, min= 0, max= torch.amax(magnitude).item())
-        
-        magnitude = normalize_quantized_spectrum(magnitude)
-        
-        return magnitude
-    
-    magnitude = magnitude / torch.amax(magnitude)
-    
-    return quantize_spectrum(magnitude)
-
-class STFT(nn.Module):
-    
-    def __init__(self, n_fft, hop_len, win_len, window, transform_type='logmag'):
-        """
-        - n_fft: 计算FFT的点数， 越大越细致，但要求更大计算能力，最好是power of 2，
-        - hop_length：窗的移动距离
-        - win_length：窗的大小
-        - window：hanning
-        - device: cuda or cpu
-        - train: 训练还是预测
-        """
-        super(STFT, self).__init__()
-        self.n_fft = n_fft
-        self.hop_len = hop_len
-        self.win_len = win_len
-        self.window = window
-        self.transform_type = transform_type
-    
-    def forward(self, dt):
-
-        with torch.no_grad():
-            device = dt['mixed'].device
-
-            for key in ['mixed', 'clean', 'noise']:
-
-                x_stft = torch.tensor(librosa.stft(
-                    dt[key].cpu().numpy().squeeze(), 
-                    n_fft= self.n_fft, 
-                    win_length= self.win_len, 
-                    hop_length= self.hop_len, 
-                    window= self.window)).T
-
-                mag = torch.abs(x_stft).to(device)
-                if key == 'mixed':
-                    dt['phase'] = torch.exp(1j * torch.angle(x_stft)).to(device)
-
-                
-                if self.transform_type == 'logmag':
-                    dt[f'{key}_mag'] = logmag_transform(mag)
-                elif self.transform_type == 'lps':
-                    dt[f'{key}_mag'] = lps_transform(mag)
-                else:
-                    dt[f'{key}_mag'] = quantize_transform(mag)
-
-            dt['mask'] = torch.div(dt['clean_mag'], dt['mixed_mag'])            
-
-        return dt
-
-
-class ISTFT(nn.Module):
-
-    def __init__(self, hop_len, win_len, window, device, chunk_size, transform_type='logmag'):
-        """
-        和STFT 参数一样
-        """
-        super(ISTFT, self).__init__()
-        self.hop_len = hop_len
-        self.win_len = win_len
-        self.window = window
-        self.chunk_size = chunk_size
-        self.device = device
-        self.transform_type = transform_type
-        self.flag = False
-
-    def forward(self, dt):
-        
-        # dt['pred_y'] = self.subtraction(pred= dt['pred_y'], noisy_mag= dt['mixed_mag'])#predict noise
-        
-        # dt['pred_y'] = torch.clamp(dt['pred_y'], min= 0, max= torch.amax(dt['pred_y']))
-                                        
-        dt['pred_y'] = self.recovery(mag= dt['pred_y'], phase= dt['phase'])
-        
-        dt['true_y'] = self.recovery(mag= dt['clean_mag'][self.chunk_size: ], phase= dt['phase'])
-        
-        if not self.flag:
-            
-            dt['mixed_y'] = self.recovery(mag= dt['mixed_mag'][self.chunk_size: ], phase= dt['phase'])
-            
-            dt['mixed_y'] = librosa.istft(
-                dt['mixed_y'].cpu().detach().numpy().T,
-                hop_length=self.hop_len,
-                win_length=self.win_len,
-                window=self.window,
-                center=True,
-                dtype=None,
-                length=None)
-            
-            self.flag = True
-        
-        for key in ['pred_y', 'true_y']:
-            dt[key] = librosa.istft(
-                            dt[key].cpu().detach().numpy().T,
-                            hop_length=self.hop_len,
-                            win_length=self.win_len,
-                            window=self.window,
-                            center=True,
-                            dtype=None,
-                            length=None)
-        return dt
-    
-    def recovery(self, mag, phase):
-        
-        if self.transform_type == 'logmag':
-            mag = logmag_transform(mag, recover=True)
-            
-        elif self.transform_type == 'lps':
-            mag = lps_transform(mag, recover=True)
-        else:
-            mag = quantize_transform(mag, recover=True)
-    
-        a = mag.cpu()
-        b = torch.cos(phase[self.chunk_size : ]) + 1j * torch.sin(phase[self.chunk_size : ]).cpu()
-        return a * b
-    
-    def subtraction(self, pred, noisy_mag):
-        res = noisy_mag[self.chunk_size: ] - pred
-        res = torch.clamp(res, min= 0, max= torch.amax(res))
-        return res
-        
-
-
-
-        
-class torch_stft(nn.Module):
-    
-    def __init__(self, n_fft, hop_length, win_length, device, transform_type='logmag'):
-        
-        super(torch_stft, self).__init__()
-        
-        self.n_fft=n_fft
-        self.hop_length=hop_length
-        self.win_length= win_length
-        self.window = torch.hann_window(n_fft, device= device)
-        self.device = device
-        self.transform_type = transform_type
-    
-    def forward(self, dt):
-        
-        for key in ['mixed', 'clean', 'noise']:
-
-            fft = torch.stft(dt[key],
-                             n_fft = self.n_fft,
-                             hop_length=self.hop_length,
-                             win_length=self.win_length,
-                             window=self.window,
-                             return_complex=True).T
-            fft = torch.squeeze(fft)
-            mag = torch.abs(fft)
-            
-            if key == 'mixed':
-                dt['phase'] = torch.exp(1j * torch.angle(fft))
-
-            if self.transform_type == 'logmag':
-                dt[f'{key}_mag'] = logmag_transform(mag)
-            elif self.transform_type == 'lps':
-                dt[f'{key}_mag'] = lps_transform(mag)
-            else:
-                dt[f'{key}_mag'] = quantize_transform(mag)
-
-        dt['mask'] = irm(dt['clean_mag'], dt['noise_mag'])
-            
-        return dt
+    if rmsnoise != 0:
+        valid = True
+        a = rmsclean/(rmsnoise*cleanfactor)
+        # Set the noise level for a given SNR
+        noisyspeech = clean + a*noise
+        return valid, noisyspeech, a*noise
+    else:
+        valid = False
+        return valid, 0, 0
     
 
-class torch_istft(nn.Module):
+def quantize_spectrum(data, num_bits=8):
+    """
+    Quantize spectrum
+    """
+
+    step_size = 1.0 / 2 ** (num_bits)
+    max_val = 2 ** (num_bits) - 1
+#     q_data = np.round(data / step_size)
+#     q_data = np.clip(q_data, 0, max_val)
+
+#     return np.uint8(q_data)
+    q_data = torch.round(data / step_size)
+    q_data = torch.clamp(q_data, 0, max_val)
+    return q_data.to(torch.uint8)
+
+def normalize_quantized_spectrum(data, num_bits=8):
+    """
+    Normalize Quantized spectrum
+    """
+    return data/ (2 ** (num_bits) - 1)
+
+
+def generate_test_files(path, noise_path, snr):
     
-    def __init__(self, n_fft, hop_length, win_length, chunk_size, device, target, transform_type='logmag', cnn='1d'):
-        
-        super(torch_istft, self).__init__()
-        
-        self.n_fft=n_fft
-        self.hop_length=hop_length
-        self.win_length= win_length
-        self.window = torch.hann_window(n_fft, device= 'cpu')
-        self.device = device
-        self.transform_type = transform_type
-        self.chunk_size = chunk_size
-        self.cnn = cnn
-        self.target = target
+    noise = torch.load(noise_path)
     
-    def mask_recover(self, dt):
-        
-        batch, time, freq = dt['pred_mag'].shape
-        
-        if freq == 256:
-            
-            pred_y = F.pad(dt['pred_mag'], (0, 1, 0, 0))
-            
-            freq += 1
-        
-            pred_y = torch.reshape(pred_y, (-1, freq))
-        
-        else:
-            
-            pred_y = torch.reshape(dt['pred_mag'], (-1, freq))
-        
-        lens = pred_y.shape[0]
-        
-        dt['pred_y'] = pred_y * dt['mixed_mag'][:lens]
-        
-        dt['pred_y'] = torch.reshape(dt['pred_y'], (batch, time, freq))
-        
-        return dt
+    clean = load_audio(path = path)
     
-    def cnn1d_recover(self, dt):
-        
-        dt['pred_y'] = torch.multiply(dt['pred_y'], dt['phase'][self.chunk_size : ])
-
-        dt['true_y'] = torch.multiply(dt['clean_mag'][self.chunk_size : ], dt['phase'][self.chunk_size : ])
-
-        dt['mixed_y'] = torch.multiply(dt['mixed_mag'][self.chunk_size : ], dt['phase'][self.chunk_size : ])
-        
-        return dt
+    while True:
     
-    def cnn2d_recover(self, dt):
-        
-        dt['pred_y'] = dt['pred_y'].reshape(-1, dt['pred_y'].shape[2])
-        
-        lens = dt['pred_y'].shape[0]
-        
-        dt['pred_y'] = torch.multiply(dt['pred_y'], dt['phase'][:lens])
-        
-        dt['true_y'] = torch.multiply(dt['clean_mag'][:lens], dt['phase'][:lens])
-        
-        dt['mixed_y'] = torch.multiply(dt['mixed_mag'][:lens], dt['phase'][:lens])
-        
-        return dt
-    
-    def forward(self, dt):
-        
-        if self.target == 'mask':  
-            
-            dt = self.mask_recover(dt)
+        noise_start = np.random.randint(0, noise.shape[0] - clean.shape[0] + 1)
 
-        if self.transform_type == 'logmag':
-            
-            for key in ['mixed_mag', 'clean_mag', 'pred_y']:
-            
-                dt[key] = logmag_transform(dt[key], recover=True)
+        noise_snippet = noise[noise_start : noise_start + clean.shape[0]]
 
-        elif self.transform_type == 'lps':
-            
-            for key in ['mixed_mag', 'clean_mag', 'pred_y']:
-            
-                dt[key] = lps_transform(dt[key], recover=True)
-            
-        else:
-            
-            for key in ['mixed_mag', 'clean_mag', 'pred_y']:
-                
-                dt[key] = quantize_transform(dt[key], recover=True)
-
-        if self.cnn == '1d':
-
-            dt = self.cnn1d_recover(dt)
-            
-        else:
-            
-            dt = self.cnn2d_recover(dt)
-
-        for key in ['mixed_y', 'true_y', 'pred_y']:
-
-            dt[key] = torch.istft(dt[key].cpu().detach().T,
-                                 n_fft = self.n_fft,
-                                 hop_length=self.hop_length,
-                                 win_length=self.win_length,
-                                 window=self.window)
-            
-        return dt            
+        valid, mixed, noise = snr_mixer(clean, noise_snippet, snr)
+        
+        if valid:
+            break
+        
+    return {'mixed': mixed, 'clean': clean, 'noise': noise}

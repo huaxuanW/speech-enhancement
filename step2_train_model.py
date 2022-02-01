@@ -21,8 +21,8 @@ from trainer import Trainer
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 ##########  define targets, checkpoint , and data path  ##############
-recovered_path = os.path.join(DATADIR, 'recovered_mask')
-model_path = os.path.join(DATADIR, 'models_mask')
+recovered_path = os.path.join(DATADIR, 'recovered')
+model_path = os.path.join(DATADIR, 'models_version_2')
 
 if not os.path.exists(model_path):
     os.mkdir(model_path)
@@ -51,7 +51,6 @@ test_dataloader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
 ##########  Pipeline ##############
 SE = SePipline(
-    version=version,
     n_fft=K, 
     hop_len=N_s, 
     win_len= N_d, 
@@ -59,10 +58,7 @@ SE = SePipline(
     device=DEVICE,
     chunk_size=CHUNK_SIZE,
     transform_type = transform_type,
-    stft_type = stft_type,
-    target = target,
-    cnn= cnn
-)
+    stft_type = stft_type)
 
 optimizer = torch.optim.Adam(SE.parameters(), lr=lr)
 criterion = nn.MSELoss()
@@ -95,7 +91,6 @@ trainer.train(epoch= epoch,
               fs = SAMPLING_RATE,
               transform_type = transform_type,
               model_path = model_path,
-              cnn = cnn,
-              target= target)
+              cnn = cnn)
 
 print('training finished')

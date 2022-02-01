@@ -7,14 +7,18 @@ class CNNBlockv2(nn.Module):
             in_channels=in_channels, out_channels=in_channels, kernel_size=3,
             stride=1, padding=1, dilation=1
         )
+
+        bn = nn.BatchNorm2d(out_channels)
         relu = nn.ReLU(True)
+        
         conv2 = nn.Conv2d(
-            in_channels=in_channels, out_channels=out_channels, kernel_size=1,
-            stride=1, padding=0, dilation=1
+            in_channels=in_channels, out_channels=out_channels, kernel_size=3,
+            stride=1, padding=1, dilation=1
         )
         self.f = nn.Sequential(
             conv1,
             conv2,
+            bn,
             relu
         )
     def forward(self, x):
@@ -25,23 +29,21 @@ class TCNNBlockv2(nn.Module):
         super(TCNNBlockv2, self).__init__()
         
         conv1 = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=3, stride=2,
-            padding=0, output_padding=1)
+            padding=1, output_padding=1)
 
         relu = nn.ReLU(True)
 
-        conv2 = nn.Conv2d(
-            in_channels=out_channels, out_channels=out_channels, kernel_size=3,
-            stride=1, padding=0, dilation=1
-        )
+        bn = nn.BatchNorm2d(out_channels)
+
         self.f = nn.Sequential(
             conv1,
-            conv2,
+            bn,
             relu
         )
     def forward(self, x):
         return self.f(x)
 
-        
+
 class CNN2DBlock(nn.Module):
     def __init__(self, channel_in, channel_out, kernel_size=(5, 7), dilation=1, stride=(1, 2), padding=0):
 
