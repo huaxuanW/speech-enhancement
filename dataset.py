@@ -6,6 +6,8 @@ from utils import load_audio, snr_mixer
 
 import numpy as np
 
+from tqdm import tqdm
+
 class NoisyData(Dataset):
 
     def __init__(self, audio_list,  snr, noise, random_seed = None, random_noise= False, ):

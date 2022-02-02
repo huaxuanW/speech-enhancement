@@ -14,6 +14,9 @@ lr = 1e-4
 
 transform_type = 'logmag' # option: transform_type = 'logmag', transform_type = 'lps', transform_type = 'normal'
 action = 'retrain' # option: action = 'retrain', action = 'train'
-pretrain_model_name = '15_epoch.pth.tar'
+pretrain_model_name = '2.37_10_epoch.pth.tar'
+
 stft_type = 'torch' #option: stft_type = 'torch', stft_type = 'librosa'
 cnn = '2d'
+target = 'mask' #option: target = 'clean_mag', target = 'noise_mag', target = 'mask'
+version = 'v5'
