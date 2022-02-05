@@ -84,8 +84,14 @@ class Trainer():
             
             self.optimizer.step()
             
-            pesq, stoi, segsnr = evaluation(batch['true_y'].numpy(), batch['pred_y'].numpy())
-            
+#             if epoch > 1:
+                
+#                 pesq, stoi, segsnr = evaluation(batch['true_y'].numpy(), batch['pred_y'].numpy())
+                
+#             else:
+                
+            pesq, stoi, segsnr = 0, 0, 0
+                
             total_pesq += pesq
             
             total_stoi += stoi

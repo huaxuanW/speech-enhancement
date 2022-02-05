@@ -84,15 +84,15 @@ class ChunkDatav3(nn.Module):
 
             chunks = time // self.chunk_size
 
-            dt['x'] = torch.zeros((chunks, self.chunk_size, freq - 1), device= device)
+            dt['x'] = torch.zeros((chunks, self.chunk_size, freq), device= device)
 
             dt['y'] = torch.zeros((chunks, self.chunk_size, freq - 1), device= device)
 
             for i in range(chunks):
                 
-                dt['x'][i] = dt['mixed_mag'][i * self.chunk_size : (i + 1) * self.chunk_size, : freq - 1]
+                dt['x'][i] = dt['mixed_mag'][i * self.chunk_size : (i + 1) * self.chunk_size, ]
                 
-                dt['y'][i] = dt[self.target][i * self.chunk_size : (i + 1) * self.chunk_size, : freq - 1] 
+                dt['y'][i] = dt[self.target][i * self.chunk_size : (i + 1) * self.chunk_size, : 256] 
             
             dt['x'] = dt['x'].permute(0, 2, 1)
 

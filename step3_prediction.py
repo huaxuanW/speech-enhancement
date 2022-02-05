@@ -19,13 +19,13 @@ import os
 
 import random
   
-model_path = os.path.join(DATADIR, 'models_mask')
-pretrain_model_name = '4.02_15_epoch.pth.tar'
+model_path = os.path.join(DATADIR, 'models_mask_limit4')
+pretrain_model_name = '3.13_21_epoch.pth.tar'
 DEVICE = 'cpu'
 transform_type = 'logmag'
 
 SE = SePipline(
-    version='v3',
+    version='v9',
     n_fft=K, 
     hop_len=N_s, 
     win_len= N_d, 
