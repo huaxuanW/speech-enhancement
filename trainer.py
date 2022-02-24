@@ -1,12 +1,11 @@
-from tqdm import tqdm
-
-import torch
-
 import os
 
-from stft import ISTFT, torch_istft
+import torch
+from tqdm import tqdm
 
-from utils import save_wav, evaluation
+from stft import ISTFT, torch_istft
+from utils import evaluation, save_wav
+
 
 class Trainer():
 
@@ -29,7 +28,9 @@ class Trainer():
         - epochs: int 玄学
         - save_model: boolean, 保存模型吗？ 保存到models文件夹下
         """
+        best_snr = 0
         best_pesq = 0
+        best_stoi = 0
 
         for epoch in range(epoch, epoch + epochs + 1):
 
@@ -42,7 +43,9 @@ class Trainer():
                 if not os.path.exists(kwargs['model_path']):
                     os.mkdir(kwargs['model_path'])
                 
-                if best_pesq < pesq:
+                if best_snr < segsnr or best_pesq < pesq or best_stoi < stoi:
+                    best_snr = segsnr
+                    best_stoi=stoi
                     best_pesq = pesq
                     state_dict = {
                         'epoch': epoch,
@@ -50,7 +53,8 @@ class Trainer():
                         'optimizer': self.optimizer.state_dict()
                     }
 
-                    torch.save(state_dict, os.path.join(kwargs['model_path'], f'{pesq}_{epoch}_epoch.pth.tar'))
+                    # torch.save(state_dict, os.path.join(kwargs['model_path'], f'{segsnr}_{epoch}_epoch.pth.tar'))
+                    torch.save(state_dict, os.path.join(kwargs['model_path'], f'best_model.pth.tar'))
                 
             self._test(self.test_loader, epoch, *args, **kwargs)
 
@@ -136,7 +140,7 @@ class Trainer():
 
                 self.model.eval()
 
-                batch = self.model(batch)
+                batch = self.model(batch, train=False)
 
                 loss = self.criterion(batch['pred_mask'], batch['y'])
 
@@ -188,7 +192,7 @@ class Trainer():
 
                     self.model.eval()
 
-                    batch = self.model(batch)
+                    batch = self.model(batch, train=False)
 
                     if not os.path.exists(kwargs['recovered_path']):
 
